@@ -1,8 +1,18 @@
 #Model notes------
 #Based on Poh et al (2012)
-#Testing summaritive performance then investigate the individual ion current predictions using Fig 1 2 3 etc - 
-#Create additional scripts to solve for each voltage supplied 
-#maybe add all together and validate individual bits? 
+
+#Kv - add in the holding voltage stuff following the patch clamp protocol
+#This requires patch cycling will need to include the cycling of it - 
+
+
+#has to be problem within equations as
+#Breaking down ICAL equation, 0 Vm - constant E_Ca  will always be larger than 10 - E_Ca
+#difference in has to be the effect of voltage activation/inactivation of channels
+#As Calcium effects are presumed to be 0
+#Maybe get someone to check?
+#move on and test other channels. 
+
+
 
 #addd in calcium buffering as it gives Ca2+ ree ? may be important?
 #packages----
@@ -12,7 +22,8 @@ library("ggplot2")
 library("deSolve")
 library("gridExtra")
 #Import observed data----
-L_type <- read.csv("GI SMC EP/data/L_type_IV.csv")
+L_type <- read.csv("data/L_type_IV.csv")
+L_type$x <- round(L_type$x,0)
 # Define the ODE system + wrap----
 Model <- function(parms){
   derivs <- function(times, y, parms, fixed) {
@@ -29,10 +40,17 @@ Model <- function(parms){
       if (times >= t_peak_ICC & times < t_plateau_ICC){
         Vm_ICC <- V_rest_ICC + V_peak_ICC * (1 + exp(-f1/(2 * t_slope))) * (1/(1 + exp((times - f2 - 0.5 * f1)/t_slope)))
       } 
+      
+      if (times < clamp_start | times > clamp_end ){
+        Vm_eq <- Hv
+      } else{
+        Vm_eq <- Vm
+      } 
+      
       # L-type Calcium Current (ICaL) - need to add markov model to solve for C and O as well as for IBK ----
       # Voltage-dependent opening/closing rates
-      a_CaL <- 0.7310 * exp(Vm / 30)
-      b_CaL <- 0.2149 * exp(-Vm / 40)
+      a_CaL <- 0.7310 * exp(Vm_eq / 30) #When Vm is > 0, A increases
+      b_CaL <- 0.2149 * exp(-Vm_eq / 40) #when Vm is > 0, B decreases
       a0_LCaL <- 4 * a_CaL  # S-15
       a1_LCaL <- 3 * a_CaL  # S-16
       a2_LCaL <- 2 * a_CaL  # S-17
@@ -43,14 +61,14 @@ Model <- function(parms){
       b2_LCaL <- 3 * b_CaL  # S-21
       b3_LCaL <- 4 * b_CaL  # S-22
       # Fast and slow inactivation rates (S-23, S-24)
-      phi_f_LCaL <- 0.4742 * exp(Vm / 10)   # Fast inactivation rate (S-23)
-      phi_s_LCaL <- 0.05956 * exp(-Vm / 40)  # Slow inactivation rate (S-24)
+      phi_f_LCaL <- 0.4742 * exp(Vm_eq / 10)   # Fast inactivation rate (S-23) - Increase
+      phi_s_LCaL <- 0.05956 * exp(-Vm_eq / 40)  # Slow inactivation rate (S-24) - Decreases
       
       # Additional inactivation rate equations (S-25, S-26, S-27, S-28)
-      xi_f_LCaL <- 0.01407 * exp(-Vm / 300)  # Fast inactivation recovery rate (S-25)
-      xi_s_LCaL <- 0.01213 * exp(Vm / 500)   # Slow inactivation recovery rate (S-26)
-      psi_f_LCaL <- 0.02197 * exp(Vm / 500)  # Fast inactivation development rate (S-27)
-      psi_s_LCaL <- 0.00232 * exp(-Vm / 280) # Slow inactivation development rate (S-28)
+      xi_f_LCaL <- 0.01407 * exp(-Vm_eq / 300)  # Fast inactivation recovery rate (S-25)
+      xi_s_LCaL <- 0.01213 * exp(Vm_eq / 500)   # Slow inactivation recovery rate (S-26)
+      psi_f_LCaL <- 0.02197 * exp(Vm_eq / 500)  # Fast inactivation development rate (S-27)
+      psi_s_LCaL <- 0.00232 * exp(-Vm_eq / 280) # Slow inactivation development rate (S-28)
       
       # Transition probabilities (S-29, S-30)
       omega_f_LCaL <- (b3_LCaL * xi_f_LCaL * phi_f_LCaL) / (a3_LCaL * psi_f_LCaL)  # Fast inactivation transition probability (S-29)
@@ -61,7 +79,7 @@ Model <- function(parms){
       omega_fs_LCaL <- psi_s_LCaL  # Transition from slow to fast inactivation (S-32)
       
       # Calcium-dependent inactivation rate
-      theta_LCaL <- 4/(1 + (1 / Ca_i_free))
+      theta_LCaL <- 0#4/(1 + (1 / Ca_i_free)) - this is set to 0 to replicate EGTA present
       
       #ODE-----
       #L-type Calcium current markov map
@@ -141,7 +159,7 @@ Model <- function(parms){
   G_NSNa <- 0.022488  # nS - Maximum conductance of non-selective Na current
   G_NSK <- 0.017512  # nS - Maximum conductance of non-selective K current
   tau_d_CaT <- 1.9058 #for ICaL
-  sigma_LCaL <- 0.01 #FOR ICaL
+  sigma_LCaL <- 0# 0.01 #FOR ICaL set to 0 to replicate EGTA
   k_on <- 40633 #BK on rate
   k_c_off <- 11 #BK closed off rate
   k_o_off <- 1.1 #BK open off rate
@@ -165,7 +183,7 @@ Model <- function(parms){
   )
   
   # Time sequence for the simulation
-  times <- seq(0, 2500 , by = 1)
+  times <- seq(0, 1000, by = 1)
   
   #history
   
@@ -177,22 +195,60 @@ Model <- function(parms){
   output_df <- as.data.frame(output)
   output_df$P_total <- rowSums(output_df[2:15])
   output_df$E_Ca <- ((R * Temp) / (2 * Faraday)) * log(Ca_o / Ca_i_total)
-  output_df$I_CaL <- G_CaL * output_df$O_I_LCaL * (parms[["Vm"]] - output_df$E_Ca) # check equations again error is here? - maybe in P_O
+  output_df$I_CaL <- G_CaL * output_df$O_I_LCaL * 
+    (ifelse(output_df$time < parms[["clamp_start"]] | output_df$time > parms[["clamp_end"]], parms[["Hv"]], parms[["Vm"]]) - output_df$E_Ca)
+  
+  output_df$Vm <- ifelse(
+    output_df$time < parms[["clamp_start"]] | output_df$time > parms[["clamp_end"]], 
+    parms[["Hv"]],  # Use Hv before clamp_start or after clamp_end
+    parms[["Vm"]]   # Use Vm between clamp_start and clamp_end
+  )
+  
   return(output_df)
 }
 
 #Parameters to fit -----
-mv_tests <- seq(-90, 30, by = 10)  # Voltage steps
-peak_store <- numeric(length(mv_tests))  # Pre-allocate storage
+mv_tests <- L_type$x
+sim_v <- list()
+peak_store <- numeric(length(mv_tests))
+i <- 1
 for(i in seq_along(mv_tests)) {  # Correct looping over mv_tests
-  parms <- list(Vm = mv_tests[i])  # Set voltage parameter
+  parms <- list(Vm = mv_tests[i], Hv = -100, clamp_start = 500, clamp_end = 1012)  # Set voltage parameter
   sim_temp <- Model(parms = parms)  # Run simulation
-  peak_store[i] <- min(sim_temp$I_CaL)  # Store peak current
+  sim_temp$Vm_identity <- parms[["Vm"]]
+  sim_v[[i]] <- as.data.frame(sim_temp)
+  sim_temp_peak <- subset(sim_temp, Vm == mv_tests[i])
+  peak_store[i] <- min(sim_temp_peak$I_CaL)
 }
+
+x <- 1
+for(x in 1:length(sim_v)) {  # Correct looping over mv_tests
+  sim_v[[x]]$I_CaL_norm <- sim_v[[x]]$I_CaL / min(peak_store)
+}
+
+
+sim_v_df <- bind_rows(sim_v)  # Convert list to dataframe
+
+# Plot all conditions with color mapped to Vm
+S6.plot <- ggplot(sim_v_df, aes(x = time, y = I_CaL_norm, color = factor(Vm_identity), group = Vm)) +
+  geom_line(linewidth = 1) +  
+  labs(
+    title = "Time vs Normalized Current",
+    x = "Time (msec)",
+    y = "Normalized Current",
+    color = "Voltage (mV)"  # Legend label
+  ) +
+  scale_y_reverse()+
+  xlim(480,700) +
+  theme_minimal()  
+
+# Display the plot
+print(S6.plot)
+
+
 
 # Create dataframe with results
 IV.df <- data.frame(mV = mv_tests, I = peak_store)
-
 
 IV.df$I_norm <- IV.df$I / min(IV.df$I)
 
@@ -205,11 +261,9 @@ IV.plot <- ggplot() +
     y = "Normalized Peak I_CaL"
   ) +
   scale_y_reverse() +
-  scale_x_continuous(breaks = c(-90, -70, -70, -30, -10, 10, 30, 50)) +
+  scale_x_continuous(breaks = c(-90, -70, -70, -30, -10, 10, 30)) +
   theme_minimal()  # Clean theme
 
 # Display the plot
 print(IV.plot)
 
-
-#think this is as accurate as i can get it. it is challenging with the large points

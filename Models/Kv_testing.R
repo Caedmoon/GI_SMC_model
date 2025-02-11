@@ -16,7 +16,7 @@ library("ggplot2")
 library("deSolve")
 library("gridExtra")
 #Import observed data----
-Kv_IV <- read.csv("GI SMC EP/data/Kv_IV.csv")
+Kv_IV <- read.csv("data/Kv_IV.csv")
 # Define the ODE system + wrap----
 Model <- function(parms){
   derivs <- function(times, y, parms, fixed) {
@@ -140,7 +140,6 @@ Model <- function(parms){
   output_df$E_K <- ((R * Temp) / (2 * Faraday)) * log(K_o / K_i)
   output_df$I_K <- G_Kv * output_df$x_Kv * output_df$y_Kv * 
     (ifelse(output_df$time < parms[["holding_period"]], parms[["Hv"]], parms[["Vm"]]) - output_df$E_K)
-  # output_df$I_K_norm <- output_df$I_K / output_df$
   output_df$I_K_shifted <- output_df$I_K - output_df$I_K[1]
   return(output_df)
 }

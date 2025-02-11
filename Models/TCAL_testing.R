@@ -1,8 +1,18 @@
 #Model notes------
 #Based on Poh et al (2012)
-#Testing summaritive performance then investigate the individual ion current predictions using Fig 1 2 3 etc - 
-#Create additional scripts to solve for each voltage supplied 
-#maybe add all together and validate individual bits? 
+
+#Kv - add in the holding voltage stuff following the patch clamp protocol
+#This requires patch cycling will need to include the cycling of it - 
+
+
+#has to be problem within equations as
+#Breaking down ICAL equation, 0 Vm - constant E_Ca  will always be larger than 10 - E_Ca
+#difference in has to be the effect of voltage activation/inactivation of channels
+#As Calcium effects are presumed to be 0
+#Maybe get someone to check?
+#move on and test other channels. 
+
+
 
 #addd in calcium buffering as it gives Ca2+ ree ? may be important?
 #packages----
@@ -12,7 +22,8 @@ library("ggplot2")
 library("deSolve")
 library("gridExtra")
 #Import observed data----
-T_type <- read.csv("GI SMC EP/data/T_type_IV.csv")
+T_type <- read.csv("data/T_type_IV.csv")
+T_type$x <- round(T_type$x,0)
 # Define the ODE system + wrap----
 Model <- function(parms){
   derivs <- function(times, y, parms, fixed) {
@@ -29,11 +40,17 @@ Model <- function(parms){
       if (times >= t_peak_ICC & times < t_plateau_ICC){
         Vm_ICC <- V_rest_ICC + V_peak_ICC * (1 + exp(-f1/(2 * t_slope))) * (1/(1 + exp((times - f2 - 0.5 * f1)/t_slope)))
       } 
-      # Temp-type Calcium Current (ICaT)----
-      d_CaT_inf <- d_CaT_inf(Vm)
-      f_CaT_inf <- f_CaT_inf(Vm)
       
-      tau_f_CaT <- 0.38117 * (8.6 + 14.7 * exp(-((Vm +50)^2/900)))
+      if (times < clamp_start | times > clamp_end ){
+        Vm_eq <- Hv
+      } else{
+        Vm_eq <- Vm
+      } 
+      # Temp-type Calcium Current (ICaT)----
+      d_CaT_inf <- d_CaT_inf(Vm_eq)
+      f_CaT_inf <- f_CaT_inf(Vm_eq)
+      
+      tau_f_CaT <- 0.38117 * (8.6 + 14.7 * exp(-((Vm_eq +50)^2/900)))
       #ODE-----
       # Temp-type Calcium Channel ODEs-----
       d[1] <- (d_CaT_inf - y["d_CaT"]) / tau_d_CaT
@@ -92,29 +109,29 @@ Model <- function(parms){
   K_mNa <- 40  # mM - Na_i half saturation constant of NaK
   G_NSNa <- 0.022488  # nS - Maximum conductance of non-selective Na current
   G_NSK <- 0.017512  # nS - Maximum conductance of non-selective K current
-  tau_d_CaT <- 1.9058 #ms
-  sigma_LCaL <- 0.01 #FOR ICaL
+  tau_d_CaT <- 1.9058 #for ICaL
+  sigma_LCaL <- 0# 0.01 #FOR ICaL set to 0 to replicate EGTA
   k_on <- 40633 #BK on rate
   k_c_off <- 11 #BK closed off rate
   k_o_off <- 1.1 #BK open off rate
+  SMC_resting <- -60 #
   # Initial values for A, B, and C
-    
+  
   d_CaT_inf <- function(Vm) {
-      return(1 / (1 + exp(-((Vm + 60.5) / 5.3))))
-    }
+    return(1 / (1 + exp(-((Vm + 60.5) / 5.3))))
+  }
   
   f_CaT_inf <- function(Vm) {
     return(1 / (1 + exp(((Vm + 75.5) / 4.0))))
   }
-    
-    
+  
   initial <- c(
-    d_CaT = d_CaT_inf(parms[["Vm"]]),
-    f_CaT = f_CaT_inf(parms[["Vm"]])
+    d_CaT = d_CaT_inf(parms[["Hv"]]),
+    f_CaT = f_CaT_inf(parms[["Hv"]])
   )
   
   # Time sequence for the simulation
-  times <- seq(0, 400, by = 0.1)
+  times <- seq(0, 1000, by = 1)
   
   #history
   
@@ -125,37 +142,73 @@ Model <- function(parms){
   # Convert output to a data frame for easier visualization
   output_df <- as.data.frame(output)
   output_df$E_Ca <- ((R * Temp) / (2 * Faraday)) * log(Ca_o / Ca_i_total)
-  output_df$I_CaT <- G_CaT * output_df$d_CaT * output_df$f_CaT * (parms[["Vm"]] - output_df$E_Ca)
+  output_df$I_CaT <- G_CaT * output_df$d_CaT * output_df$f_CaT * 
+    (ifelse(output_df$time < parms[["clamp_start"]] | output_df$time > parms[["clamp_end"]], parms[["Hv"]], parms[["Vm"]]) - output_df$E_Ca)
+  output_df$Vm <- ifelse(
+    output_df$time < parms[["clamp_start"]] | output_df$time > parms[["clamp_end"]], 
+    parms[["Hv"]],  # Use Hv before clamp_start or after clamp_end
+    parms[["Vm"]]   # Use Vm between clamp_start and clamp_end
+  )
+  
   return(output_df)
 }
 
 #Parameters to fit -----
-mv_tests <- T_type$x  # Voltage steps
-peak_store <- numeric(length(mv_tests))  # Pre-allocate storage
+mv_tests <- T_type$x#seq(-90, 35, by = 5)
+sim_v <- list()
+peak_store <- numeric(length(mv_tests))
+i <- 1
 for(i in seq_along(mv_tests)) {  # Correct looping over mv_tests
-  parms <- list(Vm = mv_tests[i])  # Set voltage parameter
+  parms <- list(Vm = mv_tests[i], Hv = -100, clamp_start = 500, clamp_end = 900)  # Set voltage parameter
   sim_temp <- Model(parms = parms)  # Run simulation
-  sim_temp <- sim_temp[-1,]
-  peak_store[i] <- min(sim_temp$I_CaT)  # Store peak current
+  sim_temp$Vm_identity <- parms[["Vm"]]
+  sim_v[[i]] <- as.data.frame(sim_temp)
+  sim_temp_peak <- subset(sim_temp, Vm == mv_tests[i])
+  peak_store[i] <- min(sim_temp_peak$I_CaT)
 }
+
+x <- 1
+for(x in 1:length(sim_v)) {  # Correct looping over mv_tests
+  sim_v[[x]]$I_CaT_norm <- sim_v[[x]]$I_CaT / min(peak_store)
+}
+
+
+sim_v_df <- bind_rows(sim_v)  # Convert list to dataframe
+
+# Plot all conditions with color mapped to Vm
+S6.plot <- ggplot(sim_v_df, aes(x = time, y = I_CaT_norm, color = factor(Vm_identity), group = Vm)) +
+  geom_line(linewidth = 1) +  
+  labs(
+    title = "Time vs Normalized Current",
+    x = "Time (msec)",
+    y = "Normalized Current",
+    color = "Voltage (mV)"  # Legend label
+  ) +
+  scale_y_reverse()+
+  xlim(480,580) +
+  theme_minimal()  
+
+# Display the plot
+print(S6.plot)
+
+
 
 # Create dataframe with results
 IV.df <- data.frame(mV = mv_tests, I = peak_store)
-
-
 IV.df$I_norm <- IV.df$I / min(IV.df$I)
 
 IV.plot <- ggplot() +
   geom_point(data = T_type, aes(x = x, y = y), color = "red", size = 3) +  # Scatter points for experimental data
   geom_line(data = IV.df, aes(x = mV, y = I_norm), color = "blue", linewidth = 1) +  # Model I-V curve
   labs(
-    title = "Normalized I-V Curve for T_CaL",
+    title = "Normalized I-V Curve for I_CaT",
     x = "Membrane Voltage (mV)",
-    y = "Normalized Peak T_CaL"
+    y = "Normalized Peak I_CaT"
   ) +
   scale_y_reverse() +
-  scale_x_continuous(breaks = c(-90, -70, -70, -30, -10, 10, 30, 50)) +
+  scale_x_continuous() +
   theme_minimal()  # Clean theme
 
 # Display the plot
 print(IV.plot)
+
