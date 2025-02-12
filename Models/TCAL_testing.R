@@ -64,6 +64,7 @@ Model <- function(parms){
   R <- 8.314  # J/(molK) - Ideal gas constant
   Faraday <- 96.48534  # C/mmol - Faraday’s constant
   Temp <- 310  # K - Temperature
+  Texp <- 297.0 #experimental temperatures
   Cm <- 50  # pF - Cell membrane Capacitance
   Vcell <- 3.5e-12  # l - Cell volume
   Ca_o <- 2  # mM - Extracellular Calcium concentration
@@ -75,6 +76,7 @@ Model <- function(parms){
   Na_i <- 10.5  # mM - Intracellular sodium concentration
   CaQ10 <- 2.1  # - Q10 for Calcium channels
   KQ10 <- 3.1  # - Q10 for potassium channels
+  T_correction_Ca <- 1.0 * CaQ10^((Temp - Texp) / 10.0) # experimental correction
   NaQ10 <- 2.45  # - Q10 for sodium channels
   Gcouple <- 2.6  # nS - Coupling conductance between ICC and SMC
   V_rest_ICC <- -57  # mV - Resting membrane potential of ICC
@@ -109,7 +111,7 @@ Model <- function(parms){
   K_mNa <- 40  # mM - Na_i half saturation constant of NaK
   G_NSNa <- 0.022488  # nS - Maximum conductance of non-selective Na current
   G_NSK <- 0.017512  # nS - Maximum conductance of non-selective K current
-  tau_d_CaT <- 1.9058 #for ICaL
+  tau_d_CaT <- 1.9058 / T_correction_Ca #for ICaL
   sigma_LCaL <- 0# 0.01 #FOR ICaL set to 0 to replicate EGTA
   k_on <- 40633 #BK on rate
   k_c_off <- 11 #BK closed off rate
@@ -154,7 +156,7 @@ Model <- function(parms){
 }
 
 #Parameters to fit -----
-mv_tests <- T_type$x#seq(-90, 35, by = 5)
+mv_tests <- seq(-90, 35, by = 5)#T_type$x#seq(-90, 35, by = 5)
 sim_v <- list()
 peak_store <- numeric(length(mv_tests))
 i <- 1
