@@ -24,6 +24,13 @@ library("gridExtra")
 #Import observed data----
 L_type <- read.csv("data/L_type_IV.csv")
 L_type$x <- round(L_type$x,0)
+
+#normalisation(not for peak)----
+norm_stat_val <- function(b){
+  sum_b <- sum(b)
+  if(sum_b == 0) return(b)
+  b / sum_b
+}
 # Define the ODE system + wrap----
 Model <- function(parms){
   derivs <- function(times, y, parms, fixed) {
@@ -49,8 +56,8 @@ Model <- function(parms){
       
       # L-type Calcium Current (ICaL) - need to add markov model to solve for C and O as well as for IBK ----
       # Voltage-dependent opening/closing rates
-      a_CaL <- 0.7310 * exp(Vm_eq / 30) #When Vm is > 0, A increases
-      b_CaL <- 0.2149 * exp(-Vm_eq / 40) #when Vm is > 0, B decreases
+      a_CaL <- T_correction_CaL * 0.7310 * exp(Vm_eq / 30) #When Vm is > 0, A increases
+      b_CaL <- T_correction_CaL * 0.2149 * exp(-Vm_eq / 40) #when Vm is > 0, B decreases
       a0_LCaL <- 4 * a_CaL  # S-15
       a1_LCaL <- 3 * a_CaL  # S-16
       a2_LCaL <- 2 * a_CaL  # S-17
@@ -62,7 +69,7 @@ Model <- function(parms){
       b3_LCaL <- 4 * b_CaL  # S-22
       # Fast and slow inactivation rates (S-23, S-24)
       phi_f_LCaL <- 0.4742 * exp(Vm_eq / 10)   # Fast inactivation rate (S-23) - Increase
-      phi_s_LCaL <- 0.05956 * exp(-Vm_eq / 40)  # Slow inactivation rate (S-24) - Decreases
+      phi_s_LCaL <- 0.005956 * exp(-Vm_eq / 40)  # Slow inactivation rate (S-24) - Decreases
       
       # Additional inactivation rate equations (S-25, S-26, S-27, S-28)
       xi_f_LCaL <- 0.01407 * exp(-Vm_eq / 300)  # Fast inactivation recovery rate (S-25)
@@ -79,7 +86,12 @@ Model <- function(parms){
       omega_fs_LCaL <- psi_s_LCaL  # Transition from slow to fast inactivation (S-32)
       
       # Calcium-dependent inactivation rate
-      theta_LCaL <- 0#4/(1 + (1 / Ca_i_free)) - this is set to 0 to replicate EGTA present
+      
+      if(CalciumDependence == 1){
+        theta_LCaL <- 4/(1 + (1 / Ca_i_free)) 
+      }else{
+        theta_LCaL <- 0 #- this is set to 0 to replicate EGTA present
+      }
       
       #ODE-----
       #L-type Calcium current markov map
@@ -113,6 +125,7 @@ Model <- function(parms){
   R <- 8.314  # J/(molK) - Ideal gas constant
   Faraday <- 96.48534  # C/mmol - Faraday’s constant
   Temp <- 310  # K - Temperature
+  Texp <- 297.0 #experimental temperatures
   Cm <- 50  # pF - Cell membrane Capacitance
   Vcell <- 3.5e-12  # l - Cell volume
   Ca_o <- 2  # mM - Extracellular Calcium concentration
@@ -125,6 +138,7 @@ Model <- function(parms){
   CaQ10 <- 2.1  # - Q10 for Calcium channels
   KQ10 <- 3.1  # - Q10 for potassium channels
   NaQ10 <- 2.45  # - Q10 for sodium channels
+  T_correction_CaL <- 1.0 * CaQ10^((Temp - 310) / 10.0) # experimental correction
   Gcouple <- 2.6  # nS - Coupling conductance between ICC and SMC
   V_rest_ICC <- -57  # mV - Resting membrane potential of ICC
   V_peak_ICC <- -23.5  # mV - Peak membrane potential of ICC
@@ -159,26 +173,30 @@ Model <- function(parms){
   G_NSNa <- 0.022488  # nS - Maximum conductance of non-selective Na current
   G_NSK <- 0.017512  # nS - Maximum conductance of non-selective K current
   tau_d_CaT <- 1.9058 #for ICaL
-  sigma_LCaL <- 0# 0.01 #FOR ICaL set to 0 to replicate EGTA
+  if(parms[["CalciumDependence"]] == 1){
+    sigma_LCaL <- 0.01 #FOR ICaL set to 0 to replicate EGTA 
+  }else{
+    sigma_LCaL <- 0 #- this is set to 0 to replicate EGTA present
+  }
   k_on <- 40633 #BK on rate
   k_c_off <- 11 #BK closed off rate
   k_o_off <- 1.1 #BK open off rate
   SMC_resting <- -60 #
   # Initial values for A, B, and C
   initial <- c(
-    C0_I_LCaL = 0.923,
-    C1_I_LCaL = 0.049,
-    C2_I_LCaL = 0,
-    C3_I_LCaL = 0,
-    C0Ca_I_LCaL = 0.025,
+    C0_I_LCaL = 0.563168,
+    C1_I_LCaL = 0.167247,
+    C2_I_LCaL = 0.0186255,
+    C3_I_LCaL = 0.000921887,
+    C0Ca_I_LCaL = 0.0202722,
     C1Ca_I_LCaL = 0.003,
-    C2Ca_I_LCaL = 0,
-    C3Ca_I_LCaL = 0,
-    O_I_LCaL = 0,
-    IVF_I_LCaL = 0,
-    IVS_I_LCaL = 0,
-    ICa_I_LCaL = 0,
-    IVF_Ca_I_LCaL = 0,
+    C2Ca_I_LCaL = 0.00602034,
+    C3Ca_I_LCaL = 0.000670459,
+    O_I_LCaL = 1.71111e-05,
+    IVF_I_LCaL = 1.85565e-05,
+    IVS_I_LCaL = 4.68845e-06,
+    ICa_I_LCaL = 3.3185e-05,
+    IVF_Ca_I_LCaL = 6.15944e-07,
     IVS_Ca_I_LCaL = 0
   )
   
@@ -213,7 +231,7 @@ sim_v <- list()
 peak_store <- numeric(length(mv_tests))
 i <- 1
 for(i in seq_along(mv_tests)) {  # Correct looping over mv_tests
-  parms <- list(Vm = mv_tests[i], Hv = -100, clamp_start = 500, clamp_end = 1012)  # Set voltage parameter
+  parms <- list(Vm = mv_tests[i], Hv = -100, clamp_start = 500, clamp_end = 1012, CalciumDependence = 0)  # Set voltage parameter
   sim_temp <- Model(parms = parms)  # Run simulation
   sim_temp$Vm_identity <- parms[["Vm"]]
   sim_v[[i]] <- as.data.frame(sim_temp)

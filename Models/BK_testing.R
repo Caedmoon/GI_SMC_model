@@ -1,10 +1,10 @@
 #Model notes------
 #Based on Poh et al (2012)
-#This one investigates probability of open over 3 intracellular calcium
-#So this model investigates that as well
+
+#Operates in ms
 
 
-#addd in calcium buffering as it gives Ca2+ ree ? may be important?
+
 #packages----
 library("dplyr")
 library("FME")
@@ -154,7 +154,7 @@ Model <- function(parms){
     O1_BK = 0.1,  # Open, 1 Ca²⁺
     O2_BK = 0.1,  # Open, 2 Ca²⁺
     O3_BK = 0.1,  # Open, 3 Ca²⁺
-    O4_BK = 0   # Open, 4 Ca²⁺ (conducting state)
+    O4_BK = 0.1   # Open, 4 Ca²⁺ (conducting state)
   )
   
   # Time sequence for the simulation
@@ -180,10 +180,10 @@ Model <- function(parms){
 #Parameters to fit -----
 BK_test.func <- function(Ca_i_free,BK){
   i <- 1
-  mv_tests <- BK$x#seq(-90, 35, by = 5)
+  mv_tests <- seq(-70, 60, by = 5)
   sim_v <- list()
   for(i in seq_along(mv_tests)) {  # Correct looping over mv_tests
-    parms <- list(Vm = -mv_tests[i] * 10^-3, Ca_i_free = Ca_i_free * 10^-3)  # Set voltage parameter
+    parms <- list(Vm = -mv_tests[i] * 10^-3, Ca_i_free = Ca_i_free * 10^-3)  #Polarity is reversed in code...
     sim_temp <- Model(parms = parms)  # Run simulation
     sim_temp$Vm_identity <- parms[["Vm"]]
     sim_v[[i]] <- as.data.frame(sim_temp)
@@ -267,7 +267,7 @@ combined_plot <- ggplot() +
   geom_line(data = OV_0.0001, aes(x = Vm, y = Max_O4_BK), color = "red", linewidth = 1) +
   geom_line(data = OV_0.0003, aes(x = Vm, y = Max_O4_BK), color = "blue", linewidth = 1) +
   geom_line(data = OV_0.001, aes(x = Vm, y = Max_O4_BK), color = "green", linewidth = 1) +
-  
+  xlim(-70,50) +
   # Labels and theme
   labs(
     title = "Open Probability vs Membrane Voltage for Different Ca_I Concentrations",
