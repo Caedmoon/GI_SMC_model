@@ -2,7 +2,6 @@
 #Based on Poh et al (2012)
 #Testing summaritive performance then investigate the individual ion current predictions using Fig 1 2 3 etc - 
 #Create additional scripts to solve for each voltage supplied 
-#Go through their full code in MatLAb and mine in R - assess what units each one is in
 #packages----
 library("dplyr")
 library("FME")
@@ -356,7 +355,7 @@ Model <- function(parms){
   )
   
   # Time sequence for the simulation ms
-  times <- seq(0, 1800, by = 0.1)
+  times <- seq(0, 1800, by = 1)
   
   #history
   
@@ -384,7 +383,7 @@ Initial_out <- Model(parms = parms)
 
 Voltage_plot <- ggplot() +
   geom_line(data = Initial_out, aes(x = time / 1000, y = Vm, colour = "Vm")) +
-  scale_colour_manual(values = c("Vm" = "black")) +
+  sCale_colour_manual(values = c("Vm" = "black")) +
   xlim(1760,1800) +
   xlab("time (s)") +
   ylab("Voltage (mV)") +
@@ -392,7 +391,7 @@ Voltage_plot <- ggplot() +
 
 Ca_i_free_plot <- ggplot() +
   geom_line(data = Initial_out, aes(x = time / 1000, y = Ca_i_free_nm, colour = "Ca_i_free")) +
-  scale_colour_manual(values = c("Ca_i_free" = "black")) +
+  sCale_colour_manual(values = c("Ca_i_free" = "black")) +
   xlim(1760,1800) +
   xlab("time (s)") +
   ylab("Free Intracellular\n calcium (nM)") +
