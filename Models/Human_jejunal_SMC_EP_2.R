@@ -223,8 +223,6 @@ Model <- function(parms){
       d[38] <- (y_Kv_inf - y["y_Kv"]) / tau_y_Kv
       
       
-      #printing to find problem
-      print(paste0(times,"     ", as.character(y["y_Kv"])))
       
       # Return the rates of change
       return(list(d))
