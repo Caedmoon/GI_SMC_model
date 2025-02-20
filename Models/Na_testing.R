@@ -62,7 +62,7 @@ Model <- function(parms){
       KC1I1 <- parval[33] * exp(parval[21] + parval[22] * Vm_eq)* T_correction_Na
       KI1O <- parval[34] * exp(parval[35] + parval[36] * Vm_eq)* T_correction_Na
       #ODE-----
-      # Temp-type Calcium Channel ODEs-----
+      # Na ODes-----
       d[1] <- KI2I1 * y["I2_Na"] + KOI1 * y["O_Na"] + KC1I1 * y["C1_Na"] - (KI1I2 + KI1O + KI1C1) * y["I1_Na"]  # Inactivated State 1
       d[2] <- KI1I2 * y["I1_Na"] - KI2I1 * y["I2_Na"] # Inactivated 2
       d[3] <- KI1O * y["I1_Na"] + KC1O * y["C1_Na"] - (KOI1 + KOC1) * y["O_Na"]  # Open 

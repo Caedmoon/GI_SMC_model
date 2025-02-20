@@ -30,11 +30,11 @@ Model <- function(parms){
       }
       local_time <- times - stim_start
       
-      if (local_time >= 0 && local_time < t_peak_ICC) {
-        Vm_ICC <- V_rest_ICC + V_peak_ICC * (local_time / f2)
-      } else if (local_time >= t_peak_ICC && local_time < t_plateau_ICC) {
-        Vm_ICC <- V_rest_ICC + V_peak_ICC * (1 + exp(-f1 / (2 * t_slope))) * (1 / (1 + exp((local_time - f2 - 0.5 * f1) / t_slope)))
-      }
+      if(local_time < t_peak_ICC){
+        I_stim <- Gcouple * (y["Vm"] - (t_peak_ICC + V_amp_ICC * local_time/f2))
+      }else
+        I_stim <- Gcouple * (y["Vm"] - (V_peak_ICC + V_amp_ICC * (1 + exp(-f1/(2 * t_slope)))* 1/(1 + exp((local_time - f2-0.5 * f1)/t_slope))))
+      
       # Nernst Potentials----
       E_Ca <- (R * Temp / (2 * Faraday)) * log(Ca_o / y["Ca_i_free"])
       E_K <- (R * Temp / Faraday) * log(K_o / y["K_i"])
@@ -74,41 +74,42 @@ Model <- function(parms){
       
       # Calcium-dependent inactivation rate
       if(CalciumDependence == 1){
-        theta_LCaL <- 4/(1 + (1 / y["Ca_i_free"]))  * T_correction_Ca_1
+        theta_LCaL <- T_correction_Ca_1 * 4/(1 + (1 / y["Ca_i_free"]))
       }else{
         theta_LCaL <- 0 #- this is set to 0 to replicate EGTA present
       }
       
-      
+      norm2 <- (y["C0_LCaL"] + y["C1_LCaL"] + y["C2_LCaL"] + y["C3_LCaL"] + y["C4_LCaL"] + y["C0Ca_LCaL"] + y["C1Ca_LCaL"] + y["C2Ca_LCaL"] + y["C3Ca_LCaL"] + y["C4Ca_LCaL"] + 
+      y["ICa_LCaL"] + y["IVF_LCaL"] + y["IVF_Ca_LCaL"] + y["IVS_LCaL"] + y["IVS_Ca_LCaL"] + y["O_LCaL"])
       # Temp-type Calcium Current (ICaT)----
       I_CaT <- G_CaT * y["d_CaT"] * y["f_CaT"] * (y["Vm"] - E_Ca)
       
       d_CaT_inf <- d_CaT_inf(y["Vm"])
       f_CaT_inf <- f_CaT_inf(y["Vm"])
       
-      tau_f_CaT <- 0.38117 * (8.6 + 14.7 * exp(-((y["Vm"] +50)^2/900))) / T_correction_Ca_2
+      tau_f_CaT <- 0.38117*(8.6+14.7*exp(-(y["Vm"]+50.0)*(y["Vm"]+50.0)/900.0)) / T_correction_Ca_2
       # Voltage-dependent Potassium Current (IKv)----
       I_Kv <- G_Kv * y["x_Kv"] * y["y_Kv"] * (y["Vm"] - E_K)
-      
+      I_NsK <- G_Kv * (y["Vm"] - E_K)
       x_Kv_inf <- x_Kv_inf(y["Vm"])
       y_Kv_inf <- y_Kv_inf(y["Vm"])
       # Calcium & Voltage-activated Potassium Current (IBK)-----
       I_BK <- G_BK * y["O4_BK"] * (y["Vm"] - E_K)
-      a_BK <- exp((0.73 * Faraday * y["Vm"])/(Temp * R))
-      b_BK <- exp((-0.67 * Faraday * y["Vm"])/(Temp * R))
+      a_BK <- 1.0*exp((8.47188*y["Vm"])/(1.0*Temp))
+      b_BK <- 1.0*exp(-7.77556*y["Vm"]/(1.0*Temp))
       
-      #voltage dependent transitions (converted to ms)
-      KC0O0_BK <- a_BK * 21.6200042030946 * 10^-3
-      KC1O1_BK <- a_BK * 0.868781002082468 * 10^-3
-      KC2O2_BK <- a_BK * 0.028063354826539 * 10^-3
-      KC3O3_BK <- a_BK * 0.781455969444612 * 10^-3
-      KC4O4_BK <- a_BK * 44.323856772419 * 10^-3
+      #voltage dependent transitions (ms)
+      KC0O0_BK <- a_BK * 0.02162
+      KC1O1_BK <- a_BK * 0.000869
+      KC2O2_BK <- a_BK * 0.0000281
+      KC3O3_BK <- a_BK * 0.000781
+      KC4O4_BK <- a_BK * 0.044324
       
-      KO0C0_BK <- b_BK * 318108.401217897 * 10^-3
-      KO1C1_BK <- b_BK * 144173.645394299 * 10^-3
-      KO2C2_BK <- b_BK * 32659.4033438573 * 10^-3
-      KO3C3_BK <- b_BK * 95.3119836990264 * 10^-3
-      KO4C4_BK <- b_BK * 0.105563199075352 * 10^-3
+      KO0C0_BK <- b_BK * 318.1084
+      KO1C1_BK <- b_BK * 144.1736
+      KO2C2_BK <- b_BK * 32.6594
+      KO3C3_BK <- b_BK * 0.095312
+      KO4C4_BK <- b_BK * 0.000106
       
       # Define rate equations for calcium-dependent transitions
       KC0C1_BK <- (y["Ca_i_free"] * 4 * k_on)
@@ -130,41 +131,35 @@ Model <- function(parms){
       KO3O2_BK <- (3 * k_o_off)
       KO2O1_BK <- (2 * k_o_off)
       KO1O0_BK <- (1 * k_o_off)
+      norm1 <- y["C0_BK"] + y["C1_BK"] + y["C2_BK"] + y["C3_BK"] + y["C4_BK"] + y["O0_BK"] + y["O1_BK"] + y["O2_BK"] + y["O3_BK"] + y["O4_BK"]
       # Voltage-dependent Sodium Current (INa)-----
       I_Na <- G_Na * y["O_Na"] * (y["Vm"] - E_Na)
       
-      KOI1 <- parval[23] * exp(parval[1] + parval[2] * y["Vm"]) * T_correction_Na  # (S-80)
-      KI1I2 <- parval[24] * exp(parval[3] + parval[4] * y["Vm"]) * T_correction_Na   # (S-81)
-      KC3C2 <- parval[25] * exp(parval[5] + parval[6] * y["Vm"]) * T_correction_Na   # (S-82)
-      KC2C1 <- parval[26] * exp(parval[7]+ parval[8] * y["Vm"]) * T_correction_Na  
-      KC1O <- parval[27] * exp(parval[9] + parval[10] * y["Vm"]) * T_correction_Na 
-      KI2I1 <- parval[28] * exp(parval[11] + parval[12] * y["Vm"]) * T_correction_Na 
-      KC2C3 <- parval[29] * exp(parval[13] + parval[14] * y["Vm"]) * T_correction_Na 
-      KC1C2 <- parval[30] * exp(parval[15] + parval[16] * y["Vm"]) * T_correction_Na 
-      KOC1 <- parval[31] * exp(parval[17] + parval[18] * y["Vm"]) * T_correction_Na 
-      KI1C1 <- parval[32] * exp(parval[19] + parval[20] * y["Vm"]) * T_correction_Na 
-      KC1I1 <- parval[33] * exp(parval[21] + parval[22] * y["Vm"]) * T_correction_Na 
-      KI1O <- parval[34] * exp(parval[35] + parval[36] * y["Vm"]) * T_correction_Na 
+      KI2I1 <- T_correction_Na*0.0039239*exp(2.6793+0.0061468*y["Vm"])
+      KI1O <- T_correction_Na*0.12052*exp(-9.6028+0.083025*y["Vm"])
+      KOC1 <- T_correction_Na*2.391*exp(-13.335-0.25289*y["Vm"])
+      KC1C2 <- T_correction_Na*3.1566*exp(0.36352+0.077193*y["Vm"])
+      KC2C3 <- T_correction_Na*0.55432*exp(-0.099074+0.036441*y["Vm"])
+      KC3C2 <- T_correction_Na*0.00052548*exp(-0.069102+0.0031945*y["Vm"])
+      KC2C1 <- T_correction_Na*1.4496*exp(-0.1566+0.058353*y["Vm"])
+      KC1O <- T_correction_Na*1.5329*exp(0.0093193+0.041075*y["Vm"])
+      KOI1 <- T_correction_Na*1.6164*exp(0.30763+0.0060535*y["Vm"])
+      KI1I2 <- T_correction_Na*0.027735*exp(0.05149-0.046865*y["Vm"])
+      KI1C1 <- T_correction_Na*1.9046*exp(-2.484+0.020406*y["Vm"])
+      KC1I1 <- T_correction_Na*0.00021688*exp(-0.063438+0.0046683*y["Vm"])
+      norm3 <- y["O_LCaL"] + y["C1_Na"] + y["C2_Na"] + y["C3_Na"] + y["I1_Na"] + y["I2_Na"]
       # Sodium-Calcium Exchanger (NCX)------
-      I_NCX <- P_NCX * ((exp(gamma * y["Vm"] * Faraday / (R * Temp)) * (y["Na_i"]^3) * Ca_o) -
-                          (2.5 * exp(((gamma - 1) * y["Vm"] * Faraday) / (R * Temp)) * (Na_o^3) * y["Ca_i_free"])) /
-        ((1 + k_sat * exp((gamma - 1 * y["Vm"] * Faraday) / (R * Temp))) *
-           ((K_mNa^3 + Na_o^3) * (K_mCa + Ca_o)))
-      
+      I_NCX <- P_NCX*(exp(gamma*y["Vm"]*Faraday/(R*Temp))*y["Na_i"]^3.0*Ca_o-2.5*exp((gamma-1.0)*y["Vm"]*Faraday/(R*Temp))*Na_o^3.0*y["Ca_i_free"])/((K_mNa^3.0+Na_o^3.0)*(K_mCa+Ca_o)*(1.0+k_sat*exp((gamma-1.0)*y["Vm"]*Faraday/(R*Temp))))
       # Sodium-Potassium Pump (NaK)-----
-      I_NaK <- P_NaK * ((K_o * y["Na_i"]) / ((K_mK + K_o) * (K_mNa + y["Na_i"])* (1 + 0.1245 * exp(-((0.1 * y["Vm"] * Faraday)/(R * Temp)))) + 0.0353 * exp(-((y["Vm"] * Faraday)/(R * Temp)))))
+      I_NaK <- P_NaK * ((K_o * y["Na_i"]) / ((K_mK + K_o) * (K_mNa + y["Na_i"])* (1 + 0.1245 * exp(((-0.1 * y["Vm"] * Faraday)/(R * Temp)))) + 0.0353 * exp(((-y["Vm"] * Faraday)/(R * Temp)))))
       
       # Non-Selective Leak Current (INS)-----
-      I_NaNS <- G_NSNa * (y["Vm"] - E_Na)
+      I_NsNa <- G_NSNa * (y["Vm"] - E_Na)
       I_KNS <- G_NSK * (y["Vm"] - E_K)
-      I_NS <- I_NaNS + I_KNS
-      
-      # Ionic Current-----
-      I_ion <- I_CaL + I_CaT + I_Kv + I_BK + I_Na + I_NCX + I_NaK + I_NS
+      I_NS <- I_NsNa + I_KNS
       
       # Ionic Stimulation-----
-      I_stim <- Gcouple * (y["Vm"] - Vm_ICC)
-      
+     
       #ODE-----
       # BK Channel
       #Closed
@@ -209,20 +204,17 @@ Model <- function(parms){
       d[32] <- (f_CaT_inf - y["f_CaT"]) / tau_f_CaT
       
       #Ion concentration tracked in mM
-      # Intracellular Calcium Concentration - d[Ca_i_total]
-      d[33] <- (- (I_CaL + I_CaT - I_NCX) / (2 * Faraday * Vcell))
+      # Intracellular Calcium Concentration - d[Ca_i_free]
+      d[33] <- -1e-15 * (I_CaL + I_CaT - I_NCX * 2)/(2 * V_myo * Faraday)/ ((1 + CRT_n * CRT_total * CRT_KD)^2 + CaM_n * CaM_total * CaM_KD * y["Ca_i_free"]^(CaM_n - 1)/(y["Ca_i_free"]^CaM_n +CaM_KD)^2)
       # Intracellular Potassium Concentration - d[K_i]
-      d[34] <- (- (I_Kv + I_BK + I_stim - I_NaK - I_KNS) / (Faraday * Vcell))
+      d[34] <- -1e-15 * (I_Kv + I_BK + I_NsK + I_stim - I_NaK * 2)/(V_myo * Faraday)
       # Intracellular Sodium Concentration - d[Na_i]
-      d[35] <- (- (I_Na - I_NCX - I_NaK - I_NaNS) / (Faraday * Vcell))
-
+      d[35] <- -1/1e15 * (I_Na + I_NCX * 3 + I_NaK * 3 + I_NsNa)/(V_myo * Faraday)
       #Single hJSMC electrophysiology -dVm
-      d[36] <- (I_ion + I_stim) / Cm
+      d[36] <- -1.0/Cm * (I_Na+I_CaL+I_CaT+I_Kv+I_BK+I_NCX+I_NaK+I_NsK+I_NsNa+I_stim)
       # Voltage-dependent Potassium Channel ODEs
       d[37] <- (x_Kv_inf - y["x_Kv"]) / tau_x_Kv
       d[38] <- (y_Kv_inf - y["y_Kv"]) / tau_y_Kv
-      
-      
       
       # Return the rates of change
       return(list(d))
@@ -283,6 +275,7 @@ Model <- function(parms){
   k_c_off <- 11 #BK closed off rate
   k_o_off <- 1.1 #BK open off rate
   SMC_resting <- -60 #
+  V_myo <- 3.5e-12
   T_correction_Ca_1 <- 1.0 * Q10Ca^((Temp - 310) / 10.0) # experimental correction
   T_correction_Ca_2 <- 1.0 * Q10Ca^((Temp - Texp) / 10.0) # experimental correction
   T_correction_Na <- 1.0 * Q10Na^((Temp - Texp) / 10.0) # experimental correction
@@ -298,7 +291,7 @@ Model <- function(parms){
   tau_y_Kv <- 763.7564 / T_correction_K  # ms - Time constant for Kvy
   #Function for CaT
   d_CaT_inf <- function(Vm) {
-    return(1 / (1 + exp(-((Vm + 60.5) / 5.3))))
+    return(1 / (1 + exp((-(Vm + 60.5) / 5.3))))
   }
   
   f_CaT_inf <- function(Vm) {
@@ -312,15 +305,7 @@ Model <- function(parms){
   y_Kv_inf <- function(Vm) {
     return(1/ (1 + exp(((Vm + 44.9)/12.0096))))
   }
-  #Na channels parameters from code
-  parval <- c(0.307629865993612,0.00605347675235982,0.0514901233349612,-0.0468650997035773,-0.0691017278134239,0.00319450166548765,
-              -0.156598571141704,0.0583527292113407,0.00931925729714207,0.0410752869450889,2.67926519075303,0.00614677585983095,
-              -0.0990741811465619,0.0364411841506491,0.363520774026992,0.0771931771113635,-13.3349821299039,-0.252888485042226,
-              -2.48395798104711,0.0204061599230419,-0.0634382282818863,0.00466834101392052,1.61639957785747,0.0277351044118711,
-              0.000525484598535321,1.4496348286393,1.53287364507221,0.00392388356048677,0.554315057682815,3.15656890165025,
-              2.39152928164775,1.90461121472293,0.00021688112860783,0.120515381956888,-9.60280306718205,0.0830250234337321 )
-  
-  #BK has special units?
+
   
   # Initial values for A, B, and C
   initial <- c(
@@ -366,7 +351,7 @@ Model <- function(parms){
   
   
   # Time sequence for the simulation ms
-  times <- seq(0, t_period, by = 1)
+  times <- seq(0, t_period * 4, by = 1)
   
   #history
   
@@ -393,17 +378,17 @@ Initial_out <- Model(parms = parms)
 
 
 Voltage_plot <- ggplot() +
-  geom_line(data = Initial_out, aes(x = time / 1000, y = Vm, colour = "Vm")) +
+  geom_line(data = Initial_out, aes(x = time /1000, y = Vm, colour = "Vm")) +
   scale_colour_manual(values = c("Vm" = "black")) +
-  xlim(1760,1800) +
+  #xlim(1760,1800) +
   xlab("time (s)") +
   ylab("Voltage (mV)") +
   ggtitle("hJMC voltage simulation")
 
 Ca_i_free_plot <- ggplot() +
-  geom_line(data = Initial_out, aes(x = time / 1000, y = Ca_i_free_nm, colour = "Ca_i_free")) +
+  geom_line(data = Initial_out, aes(x = time /1000, y = Ca_i_free_nm, colour = "Ca_i_free")) +
   scale_colour_manual(values = c("Ca_i_free" = "black")) +
-  xlim(1760,1800) +
+  #xlim(1760,1800) +
   xlab("time (s)") +
   ylab("Free Intracellular\n calcium (nM)") +
   ggtitle("hJMC Free Intracellular\n calcium (nM) simulation")
