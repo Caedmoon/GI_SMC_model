@@ -1,5 +1,6 @@
 #Model notes------
-#Something wrong with Calcium channels. keep going over C version
+#take equations for each channe; from code and adapt directly to R
+#Done for BK
 #packages----
 library("dplyr")
 library("FME")
@@ -16,6 +17,19 @@ Model <- function(parms){
       # Rate equations
       
       #Single slow wave-----
+      # if (times >= period * 0.0 && times <= period){
+      #   stim_start <- period * 0.0
+      # }else if(times >= period * 1 && times <= period * 2){
+      #   stim_start <- period * 1.0
+      # }else if(times >= period * 2 && times <= period * 3){
+      #   stim_start <- period * 2.0
+      # }else if(times >= period * 3 && times <= period * 4){
+      #   stim_start <- period * 3.0
+      # }else{
+      #   stim_start <- 0.0
+      # }
+      # local_time <- times - stim_start
+      
       stim_cycle <- times %/% period
       stim_start <- stim_cycle * period
       local_time <- times - stim_start
@@ -28,6 +42,7 @@ Model <- function(parms){
       else{
         Vm_ICC <- V_ICCrest
       }
+      print(Vm_ICC)
       I_stim <- Gcouple * (y["Vm"] - Vm_ICC)
       # Nernst Potentials----
       E_Ca <- (R * Temp / (2 * Faraday)) * log(Cao / y["Ca_i_free"])
@@ -208,7 +223,7 @@ Model <- function(parms){
       # Voltage-dependent Potassium Channel ODEs
       d[37] <- (x_Kv_inf - y["x_Kv"]) / tau_x_Kv
       d[38] <- (y_Kv_inf - y["y_Kv"]) / tau_y_Kv
-      print(times)
+      #print(times)
       # Return the rates of change
       return(list(d))
     })
@@ -222,7 +237,7 @@ Model <- function(parms){
   V_ICCrest <- -57.0   # millivolt (in I_stim)
   f_1 <- 12000.0   # millisecond (in I_stim)
   f_2 <- 300.0   # millisecond (in I_stim)
-  period <- 10000    # millisecond (in I_stim)
+  period <- 9700    # millisecond (in I_stim)
   t_ICCpeak <- 300.0   # millisecond (in I_stim)
   t_slope <- 600.0   # millisecond (in I_stim)
   t_ICCplateau <- 9700 #millisecond (in I_stim)
@@ -341,7 +356,8 @@ Model <- function(parms){
   
   
   # Time sequence for the simulation ms
-  times <- seq(1760000, 1800000, by = 1)
+  times <- seq(0, period * 2, by = 1)
+  
   #history
   
   
@@ -361,7 +377,13 @@ Model <- function(parms){
                                     V_ICCrest))
   return(output_df)
 }
-parms <- c(CalciumDependence = 1)
+
+#Parameters to fit -----
+parms <- list(
+  CalciumDependence = 1
+)
+
+#initial estimate -----
 Initial_out <- Model(parms = parms)
 
 ICC_plot <- ggplot() +
@@ -373,23 +395,4 @@ ICC_plot <- ggplot() +
   ylab("Voltage (mV)") +
   ggtitle("ICC voltage sim")
 
-
-Voltage_plot <- ggplot() +
-  geom_line(data = Initial_out, aes(x = time /1000, y = Vm, colour = "Vm")) +
-  scale_colour_manual(values = c("Vm" = "black")) +
-  #xlim(1760,1800) +
-  #ylim(-65,-30) +
-  xlab("time (s)") +
-  ylab("Voltage (mV)") +
-  ggtitle("hJMC voltage simulation")
-
-Ca_i_free_plot <- ggplot() +
-  geom_line(data = Initial_out, aes(x = time /1000, y = Ca_i_free * 10^6, colour = "Ca_i_free")) +
-  scale_colour_manual(values = c("Ca_i_free" = "black")) +
-  #xlim(1760,1800) +
-  #ylim(0,300) +
-  xlab("time (s)") +
-  ylab("Free Intracellular\n calcium (nM)") +
-  ggtitle("hJMC Free Intracellular\n calcium (nM) simulation")
-
-grid.arrange(grobs = list(Voltage_plot, Ca_i_free_plot), ncol = 1, nrow = 2)
+print(ICC_plot)
