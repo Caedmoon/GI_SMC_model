@@ -50,7 +50,7 @@ Model <- function(parms){
       b3_LCaL <- 4 * b_CaL  # S-22
       # Fast and slow inactivation rates (S-23, S-24)
       phi_f <- 0.4742 * exp(y["Vm"] / 10) * T_correction_Ca_1   # Fast inactivation rate (S-23)
-      phi_s <- 0.005956 * exp(-y["Vm"] / 40) * T_correction_Ca_1  # Slow inactivation rate (S-24)
+      phi_s <- 0.05956 * exp(-y["Vm"] / 40) * T_correction_Ca_1  # Slow inactivation rate (S-24)
       
       # Additional inactivation rate equations (S-25, S-26, S-27, S-28)
       xi_f <- 0.01407 * exp(-y["Vm"] / 300) * T_correction_Ca_1  # Fast inactivation recovery rate (S-25)
@@ -80,7 +80,7 @@ Model <- function(parms){
       d_CaT_inf <- d_CaT_inf(y["Vm"])
       f_CaT_inf <- f_CaT_inf(y["Vm"])
       
-      tau_f_CaT <- 0.38117*(8.6+14.7*exp(-(y["Vm"]+50.0)*(y["Vm"]+50.0)/900.0)) / T_correction_Ca_2
+      tau_f_CaT <- 0.38117*(8.6+14.7*exp(-(y["Vm"]+50.0)^2/900.0)) / T_correction_Ca_2
       # Voltage-dependent Potassium Current (IKv)----
       I_Kv <- g_Kv * y["x_Kv"] * y["y_Kv"] * (y["Vm"] - E_K)
       I_NsK <- g_Kv * (y["Vm"] - E_K)
@@ -148,8 +148,8 @@ Model <- function(parms){
       
       # Non-Selective Leak Current (INS)-----
       I_NsNa <- g_NsNa * (y["Vm"] - E_Na)
-      I_KNS <- g_NsK * (y["Vm"] - E_K)
-      I_NS <- I_NsNa + I_KNS
+      I_NsK <- g_NsK * (y["Vm"] - E_K)
+      I_NS <- I_NsNa + I_NsK
       
       # Ionic Stimulation-----
       I_ion <- I_CaL + I_CaT + I_Kv + I_BK + I_Na + I_NCX + I_NaK + I_NS
@@ -160,7 +160,6 @@ Model <- function(parms){
                           (K_D_CaM))/((((y["Ca_i_free"]^n_CaM) + K_D_CaM)^2))
       
       theta_cabuff = 1.0 + theta_1_cabuff + theta_2_cabuff
-      
       #ODE-----
       # BK Channel
       #Closed
@@ -206,16 +205,18 @@ Model <- function(parms){
       
       #Ion concentration tracked in mM
       # Intracellular Calcium Concentration - d[Ca_i_free]
-      d[33] <- -1.0e-15*((I_CaL+I_CaT-I_NCX*2.0)/(2.0*V_myo*Faraday)/theta_cabuff)
+      d[33] <-  y["Ca_i_total"] * 10e-9  / theta_cabuff
       # Intracellular Potassium Concentration - d[K_i]
-      d[34] <- -1e-15 * (I_Kv + I_BK + I_NsK + I_stim - I_NaK * 2)/(V_myo * Faraday)
+      d[34] <- -((I_Kv + I_BK + I_stim - 2*I_NaK + I_NsK) * 1/(V_myo * Faraday)) * 10^-9
       # Intracellular Sodium Concentration - d[Na_i]
-      d[35] <- -1/1e15 * (I_Na+I_NsNa+I_NCX*3.0+I_NaK*3.0)/(V_myo * Faraday)
+      d[35] <- ((1.0/(Faraday*V_myo))*-(I_Na+3.0*I_NaK+3.0*I_NCX+I_Na)) * 10^-9
       #Single hJSMC electrophysiology -dVm
       d[36] <- -(1.0/Cm) * (I_ion + I_stim)
       # Voltage-dependent Potassium Channel ODEs
       d[37] <- (x_Kv_inf - y["x_Kv"]) / tau_x_Kv
       d[38] <- (y_Kv_inf - y["y_Kv"]) / tau_y_Kv
+      #Ca_i_total
+      d[39] <- ((1.0/(2*Faraday*V_myo))*(-(I_CaL+I_CaT-2.0*I_NCX))) * 1.0e-9
       print(times)
       # Return the rates of change
       return(list(d))
@@ -301,12 +302,12 @@ Model <- function(parms){
   }
   
   y_Kv_inf <- function(Vm) {
-    return(1/ (1 + exp(((Vm + 44.9)/12.0096))))
+    return(1/ (1 + exp(((Vm - 44.9)/12.0096))))
   }
   
   
   # Initial values from MATLAB
-  Y = c(0.48379087935899, 0.385183559520031, 0.115002824567753, 0.0152602714149774, 0.000759264410974374, 6.94960798375172e-7, 5.55636826398253e-8, 2.85143702125325e-8, 1.59832806123435e-6, 1.82113764497095e-6, 0.815464741971086, 0.0175888495282545, 0.152399266235657, 0.00328711668724504, 0.0106805060777161, 0.000230369020877669, 0.000332673548872087, 7.1754726923539e-6, 8.38123983500905e-8, 4.0998751301597e-6, 8.84306615061238e-8, 1.1193313274705e-6, 2.41429816075123e-8, 3.88576045134351e-6, 0.0119443135223679, 0.0109545368437155, 0.973782548650071, 0.000126882921013389, 0.00318975045717667, 1.96760342050475e-6, 0.0791635737410974, 0.377831534375835, 9.6e-5, 153.604280337996, 10.5731241425458, -60, 0.14714161078933, 0.99994773314105)
+  Y = c(0.48379087935899, 0.385183559520031, 0.115002824567753, 0.0152602714149774, 0.000759264410974374, 6.94960798375172e-7, 5.55636826398253e-8, 2.85143702125325e-8, 1.59832806123435e-6, 1.82113764497095e-6, 0.815464741971086, 0.0175888495282545, 0.152399266235657, 0.00328711668724504, 0.0106805060777161, 0.000230369020877669, 0.000332673548872087, 7.1754726923539e-6, 8.38123983500905e-8, 4.0998751301597e-6, 8.84306615061238e-8, 1.1193313274705e-6, 2.41429816075123e-8, 3.88576045134351e-6, 0.0119443135223679, 0.0109545368437155, 0.973782548650071, 0.000126882921013389, 0.00318975045717667, 1.96760342050475e-6, 0.0791635737410974, 0.377831534375835, 9.6e-5, 153.604280337996, 10.5731241425458, -57, 0.14714161078933, 0.99994773314105)
   initial <- c(
     C0_BK = Y[1],   # Closed, 0 Ca²⁺
     C1_BK = Y[2],  # Closed, 1 Ca²⁺
@@ -343,9 +344,10 @@ Model <- function(parms){
     Ca_i_free = Y[33],  # mM - Initial free intracellular Calcium concentration
     K_i = Y[34],  # mM - Initial intracellular potassium concentration
     Na_i = Y[35],  # mM - Initial intracellular sodium concentration
-    Vm = Y[36],  # Membrane potential - millivolts
+    Vm = -60,  # Membrane potential - millivolts
     x_Kv = Y[37],
-    y_Kv = Y[38]
+    y_Kv = Y[38],
+    Ca_i_total = 0.004914
   )
   
   
@@ -371,20 +373,20 @@ Model <- function(parms){
   return(output_df)
 }
 parms <- c(CalciumDependence = 1)
-Initial_out2 <- Model(parms = parms)
+Initial_out3 <- Model(parms = parms)
 
 ICC_plot <- ggplot() +
-  geom_line(data = Initial_out2, aes(x = time / 1000, y = Vm_ICC, colour = "Vm")) +
+  geom_line(data = Initial_out3, aes(x = time / 1000, y = Vm_ICC, colour = "Vm")) +
   scale_colour_manual(values = c("Vm" = "black")) +
   geom_hline(yintercept = c(-57, -23.5), linetype = "dashed", color = "red") +  # Horizontal lines
-  geom_vline(xintercept = c(300 / 1000, 9700 / 1000), linetype = "dashed", color = "blue") +  # Vertical lines (convert ms to s)
+  geom_vline(xintercept = c((Initial_out3$time[1] +300) / 1000, (Initial_out3$time[1] + 9700) / 1000), linetype = "dashed", color = "blue") +  # Vertical lines (convert ms to s)
   xlab("time (s)") +
   ylab("Voltage (mV)") +
   ggtitle("ICC voltage sim")
 
 
-Voltage_plot <- ggplot() +
-  geom_line(data = Initial_out2, aes(x = time /1000, y = Vm, colour = "Vm")) +
+Voltage_plot3 <- ggplot() +
+  geom_line(data = Initial_out3, aes(x = time /1000, y = Vm, colour = "Vm")) +
   scale_colour_manual(values = c("Vm" = "black")) +
   #xlim(1760,1800) +
   #ylim(-65,-30) +
@@ -392,8 +394,8 @@ Voltage_plot <- ggplot() +
   ylab("Voltage (mV)") +
   ggtitle("hJMC voltage simulation")
 
-Ca_i_free_plot <- ggplot() +
-  geom_line(data = Initial_out2, aes(x = time /1000, y = Ca_i_free * 10^6, colour = "Ca_i_free")) +
+Ca_i_free_plot3 <- ggplot() +
+  geom_line(data = Initial_out3, aes(x = time /1000, y = Ca_i_free * 10^6, colour = "Ca_i_free")) +
   scale_colour_manual(values = c("Ca_i_free" = "black")) +
   #xlim(1760,1800) +
   #ylim(0,300) +
@@ -401,4 +403,4 @@ Ca_i_free_plot <- ggplot() +
   ylab("Free Intracellular\n calcium (nM)") +
   ggtitle("hJMC Free Intracellular\n calcium (nM) simulation")
 
-grid.arrange(grobs = list(Voltage_plot, Ca_i_free_plot), ncol = 1, nrow = 2)
+grid.arrange(grobs = list(Voltage_plot3, Ca_i_free_plot3), ncol = 1, nrow = 2)
