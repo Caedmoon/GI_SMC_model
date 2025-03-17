@@ -142,7 +142,7 @@ Model <- function(parms){
       k_C1I1_Na <- T_correction_Na*0.00021688*exp(-0.063438+0.0046683*y["Vm"])
       norm3 <- y["O_Na"] + y["C1_Na"] + y["C2_Na"] + y["C3_Na"] + y["I1_Na"] + y["I2_Na"]
       # Sodium-Calcium Exchanger (NCX)------
-      I_NCX <- P_NCX*(exp(gamma*y["Vm"]*Faraday/(R*Temp))*y["Na_i"]^3.0*Cao-2.5*exp((gamma-1.0)*y["Vm"]*Faraday/(R*Temp))*Nao^3.0*y["Ca_i_free"])/((K_mNa2^3.0+Nao^3.0)*(K_mCa+Cao)*(1.0+k_sat*exp((gamma-1.0)*y["Vm"]*Faraday/(R*Temp))))
+      I_NCX <- P_NCX*(exp(gamma*y["Vm"]*Faraday/(R*Temp))*y["Na_i"]^3.0*Cao-2.5*exp((gamma-1.0)*y["Vm"]*Faraday/(R*Temp))*Nao^3.0*y["Ca_i_free"])/((K_mNa^3.0+Nao^3.0)*(K_mCa+Cao)*(1.0+k_sat*exp((gamma-1.0)*y["Vm"]*Faraday/(R*Temp))))
       # Sodium-Potassium Pump (NaK)-----
       I_NaK <- P_NaK * ((Ko * y["Na_i"]) / ((K_mK + Ko) * (K_mNa + y["Na_i"])* (1 + 0.1245 * exp(((-0.1 * y["Vm"] * Faraday)/(R * Temp)))) + 0.0353 * exp(((-y["Vm"] * Faraday)/(R * Temp)))))
       
@@ -152,14 +152,6 @@ Model <- function(parms){
       I_NS <- I_NsNa + I_KNS
       
       # Ionic Stimulation-----
-      
-      #Calcium buffering----
-      theta_1_cabuff = (n_CRT*CRT_total*(y["Ca_i_free"]^(n_CRT - 1))*
-                          (K_D_CRT))/((((y["Ca_i_free"]^n_CRT) + K_D_CRT)^2))
-      theta_2_cabuff = (n_CaM*CaM_total*((y["Ca_i_free"]^(n_CaM - 1)))*
-                          (K_D_CaM))/((((y["Ca_i_free"]^n_CaM) + K_D_CaM)^2))
-      
-      theta_cabuff = 1.0 + theta_1_cabuff + theta_2_cabuff
       
       #ODE-----
       # BK Channel
@@ -206,7 +198,7 @@ Model <- function(parms){
       
       #Ion concentration tracked in mM
       # Intracellular Calcium Concentration - d[Ca_i_free]
-      d[33] <- -1.0e-15*((I_CaL+I_CaT-I_NCX*2.0)/(2.0*V_myo*Faraday)/theta_cabuff)
+      d[33] <- -1.0e-15*(I_CaL+I_CaT-I_NCX*2.0)/(2.0*V_myo*Faraday)/(1.0+n_CRT*CRT_total*K_D_CRT*y["Ca_i_free"]^(n_CRT-1.0)/(y["Ca_i_free"]^n_CRT+K_D_CRT)^2.0+n_CaM*CaM_total*K_D_CaM*y["Ca_i_free"]^(n_CaM-1.0)/(y["Ca_i_free"]^n_CaM+K_D_CaM)^2.0)
       # Intracellular Potassium Concentration - d[K_i]
       d[34] <- -1e-15 * (I_Kv + I_BK + I_NsK + I_stim - I_NaK * 2)/(V_myo * Faraday)
       # Intracellular Sodium Concentration - d[Na_i]
@@ -264,7 +256,6 @@ Model <- function(parms){
   g_Na <- 25.1   # nanoS (in sodium_current)
   K_mK <- 1.0   # millimolar (in sodium_potassium_pump)
   K_mNa <- 40.0   # millimolar (in sodium_potassium_pump)
-  K_mNa2 <- 87.5
   P_NaK <- 9.26   # picoA (in sodium_potassium_pump)
   Q10K1 <- 3.1   # dimensionless (Q10K1 in voltage_dep_K_channel_x_gate)
   Q10K2 <- 3.1   # dimensionless (Q10K1 in voltage_dep_K_channel_y_gate)
@@ -306,7 +297,7 @@ Model <- function(parms){
   
   
   # Initial values from MATLAB
-  Y = c(0.48379087935899, 0.385183559520031, 0.115002824567753, 0.0152602714149774, 0.000759264410974374, 6.94960798375172e-7, 5.55636826398253e-8, 2.85143702125325e-8, 1.59832806123435e-6, 1.82113764497095e-6, 0.815464741971086, 0.0175888495282545, 0.152399266235657, 0.00328711668724504, 0.0106805060777161, 0.000230369020877669, 0.000332673548872087, 7.1754726923539e-6, 8.38123983500905e-8, 4.0998751301597e-6, 8.84306615061238e-8, 1.1193313274705e-6, 2.41429816075123e-8, 3.88576045134351e-6, 0.0119443135223679, 0.0109545368437155, 0.973782548650071, 0.000126882921013389, 0.00318975045717667, 1.96760342050475e-6, 0.0791635737410974, 0.377831534375835, 9.6e-5, 153.604280337996, 10.5731241425458, -60, 0.14714161078933, 0.99994773314105)
+  Y = c(0.48379087935899, 0.385183559520031, 0.115002824567753, 0.0152602714149774, 0.000759264410974374, 6.94960798375172e-7, 5.55636826398253e-8, 2.85143702125325e-8, 1.59832806123435e-6, 1.82113764497095e-6, 0.815464741971086, 0.0175888495282545, 0.152399266235657, 0.00328711668724504, 0.0106805060777161, 0.000230369020877669, 0.000332673548872087, 7.1754726923539e-6, 8.38123983500905e-8, 4.0998751301597e-6, 8.84306615061238e-8, 1.1193313274705e-6, 2.41429816075123e-8, 3.88576045134351e-6, 0.0119443135223679, 0.0109545368437155, 0.973782548650071, 0.000126882921013389, 0.00318975045717667, 1.96760342050475e-6, 0.0791635737410974, 0.377831534375835, 9.6e-5, 153.604280337996, 10.5731241425458, -57, 0.14714161078933, 0.99994773314105)
   initial <- c(
     C0_BK = Y[1],   # Closed, 0 Ca²⁺
     C1_BK = Y[2],  # Closed, 1 Ca²⁺

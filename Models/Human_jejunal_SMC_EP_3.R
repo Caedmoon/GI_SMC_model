@@ -211,12 +211,12 @@ Model <- function(parms){
       # Intracellular Sodium Concentration - d[Na_i]
       d[35] <- ((1.0/(Faraday*V_myo))*-(I_Na+3.0*I_NaK+3.0*I_NCX+I_Na)) * 10^-9
       #Single hJSMC electrophysiology -dVm
-      d[36] <- -(1.0/Cm) * (I_ion + I_stim)
+      d[36] <- I_ion + I_stim / Cm
       # Voltage-dependent Potassium Channel ODEs
       d[37] <- (x_Kv_inf - y["x_Kv"]) / tau_x_Kv
       d[38] <- (y_Kv_inf - y["y_Kv"]) / tau_y_Kv
       #Ca_i_total
-      d[39] <- ((1.0/(2*Faraday*V_myo))*(-(I_CaL+I_CaT-2.0*I_NCX))) * 1.0e-9
+      d[39] <- 0#((1.0/(2*Faraday*V_myo))*(-(I_CaL+I_CaT-2.0*I_NCX))) * 1.0e-9
       print(times)
       # Return the rates of change
       return(list(d))
